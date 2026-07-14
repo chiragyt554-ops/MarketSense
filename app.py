@@ -1,15 +1,13 @@
 """
-MarketSense Web – Flask backend
+MarketSense Web - Flask backend
 Run locally : python app.py
 Deploy      : Railway (gunicorn)
 """
 
-import json
 import os
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 
-# ── Auto-install yfinance if missing ──────────────────────────────────────────
 try:
     import yfinance as yf
 except ImportError:
@@ -20,15 +18,29 @@ except ImportError:
 app = Flask(__name__)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Currency helpers
+# ---------------------------------------------------------------------------
+_CURRENCY_SYMBOLS = {
+    "USD": "$",  "ZAR": "R",   "GBP": "GBP ", "EUR": "EUR ",
+    "AUD": "A$", "CAD": "C$",  "JPY": "JPY ", "HKD": "HK$",
+    "SGD": "S$", "CNY": "CNY ","INR": "INR ", "CHF": "Fr",
+    "NZD": "NZ$","NOK": "kr",  "SEK": "kr",   "DKK": "kr",
+}
+
+def currency_symbol(code):
+    return _CURRENCY_SYMBOLS.get((code or "USD").upper(), code or "$")
+
+
+# ---------------------------------------------------------------------------
 # Formatters
-# ─────────────────────────────────────────────────────────────────────────────
-def fmt_large(n):
+# ---------------------------------------------------------------------------
+def fmt_large(n, sym="$"):
     if n is None: return "N/A"
-    if abs(n) >= 1e12: return f"${n/1e12:.2f}T"
-    if abs(n) >= 1e9:  return f"${n/1e9:.2f}B"
-    if abs(n) >= 1e6:  return f"${n/1e6:.2f}M"
-    return f"${n:,.0f}"
+    if abs(n) >= 1e12: return f"{sym}{n/1e12:.2f}T"
+    if abs(n) >= 1e9:  return f"{sym}{n/1e9:.2f}B"
+    if abs(n) >= 1e6:  return f"{sym}{n/1e6:.2f}M"
+    return f"{sym}{n:,.0f}"
 
 def fmt_pct_abs(n):
     return "N/A" if n is None else f"{n*100:.1f}%"
@@ -43,9 +55,9 @@ def fmt_x(n, d=1):
     return f"{n:.{d}f}x"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 # Scoring helpers
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 def bracket(val, breakpoints):
     for threshold, score in breakpoints:
         if val <= threshold:
@@ -53,7 +65,7 @@ def bracket(val, breakpoints):
     return breakpoints[-1][1]
 
 
-# Valuation
+# -- Valuation ---------------------------------------------------------------
 def score_pe_ttm(pe):
     if pe is None or pe <= 0:
         return 35, "N/M", "Negative/no earnings", "LOCK"
@@ -76,7 +88,7 @@ def score_peg(peg):
     if peg is None or peg <= 0:
         return 45, "N/A", "PEG not meaningful", "FLEX"
     s = bracket(peg, [(0.5,95),(1.0,85),(1.5,75),(2.0,60),(3.0,44),(9999,28)])
-    note = ("Excellent – growth discounted" if peg < 0.5 else
+    note = ("Excellent - growth discounted" if peg < 0.5 else
             "Very attractive" if peg < 1 else "Attractive" if peg < 1.5 else
             "Fair" if peg < 2 else "Stretched" if peg < 3 else "Overvalued vs growth")
     return s, fmt_x(peg, 2), note, "FLEX"
@@ -110,13 +122,13 @@ def score_ev_fcf(ev, fcf):
     return s, fmt_x(ratio), note, "FLEX"
 
 
-# Financial Health
+# -- Financial Health --------------------------------------------------------
 def score_de_ratio(de):
     if de is None:
         return 55, "N/A", "No debt data", "FLEX"
     de_actual = de / 100 if abs(de) > 5 else de
     if de_actual < 0:
-        return 98, "Net Cash", "Net cash – fortress balance sheet", "LOCK"
+        return 98, "Net Cash", "Net cash - fortress balance sheet", "LOCK"
     s = bracket(de_actual, [(0.1,95),(0.3,88),(0.5,82),(0.8,74),(1.5,62),(2.5,46),(4.0,32),(9999,18)])
     note = ("Virtually debt-free" if de_actual < 0.1 else "Very low leverage" if de_actual < 0.3 else
             "Conservative" if de_actual < 0.5 else "Modest" if de_actual < 0.8 else
@@ -174,7 +186,7 @@ def score_op_margin(om):
     return s, fmt_pct_abs(om), note, "FLEX"
 
 
-# Growth
+# -- Growth ------------------------------------------------------------------
 def score_rev_growth(rg):
     if rg is None:
         return 40, "N/A", "No recent data", "FLEX"
@@ -210,7 +222,7 @@ def score_fcf_margin(fcf, revenue):
             "Very strong" if margin < 0.30 else "Exceptional")
     return s, fmt_pct_abs(margin), note, "FLEX"
 
-def score_analyst_upside(current, target):
+def score_analyst_upside(current, target, sym="$"):
     if current is None or target is None or current == 0:
         return 50, "N/A", "No analyst target", "FLEX"
     upside = (target - current) / current
@@ -220,39 +232,66 @@ def score_analyst_upside(current, target):
             "At/near consensus target" if upside < 0.05 else "Modest upside" if upside < 0.10 else
             "Moderate upside" if upside < 0.20 else "Good upside" if upside < 0.35 else
             "Strong upside" if upside < 0.50 else "Very strong upside")
-    return s, f"${target:.2f} ({upside:+.0%})", note, "FLEX"
+    return s, f"{sym}{target:.2f} ({upside:+.0%})", note, "FLEX"
 
 def score_rev_quality(gm, om):
     if gm is None or om is None or gm <= 0:
         return 50, "N/A", "Insufficient data", "FLEX"
     conv = om / gm
     s = bracket(conv, [(0.0,20),(0.2,40),(0.35,55),(0.50,65),(0.65,75),(0.75,83),(0.85,90),(9,96)])
-    note = ("High overhead drag" if conv < 0.20 else "Significant SG&A burden" if conv < 0.35 else
+    note = ("High overhead drag" if conv < 0.20 else "Significant SGA burden" if conv < 0.35 else
             "Moderate overhead" if conv < 0.50 else "Reasonable" if conv < 0.65 else
             "Efficient" if conv < 0.75 else "Very efficient" if conv < 0.85 else "Lean")
     return s, f"{conv*100:.0f}% conv.", note, "FLEX"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Exchange suffix auto-detection
+# ---------------------------------------------------------------------------
+_AUTO_SUFFIXES = [".JO", ".L", ".AX", ".JNB"]
+
+def _fetch_info(ticker_symbol):
+    """Return (resolved_ticker, info_dict), auto-trying exchange suffixes if needed."""
+    info = yf.Ticker(ticker_symbol).info
+    name  = info.get("shortName") or info.get("longName")
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    if name and price:
+        return ticker_symbol, info
+
+    if "." not in ticker_symbol:
+        for suffix in _AUTO_SUFFIXES:
+            candidate = ticker_symbol + suffix
+            info2  = yf.Ticker(candidate).info
+            name2  = info2.get("shortName") or info2.get("longName")
+            price2 = info2.get("currentPrice") or info2.get("regularMarketPrice")
+            if name2 and price2:
+                return candidate, info2
+
+    return ticker_symbol, info
+
+
+# ---------------------------------------------------------------------------
 # Core analysis
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 def analyze(ticker_symbol):
-    t = yf.Ticker(ticker_symbol)
-    info = t.info
+    ticker_symbol, info = _fetch_info(ticker_symbol)
 
     name  = info.get("shortName") or info.get("longName")
     price = info.get("currentPrice") or info.get("regularMarketPrice")
     if not name or not price:
         raise ValueError(
             f"No data found for '{ticker_symbol}'. "
-            "Check the ticker symbol (e.g. NVDA, AAPL) and try again."
+            "For JSE stocks add .JO (e.g. DCP.JO), LSE add .L, ASX add .AX. "
+            "US tickers need no suffix."
         )
 
-    ev  = info.get("enterpriseValue")
-    fcf = info.get("freeCashflow")
-    rev = info.get("totalRevenue")
-    gm  = info.get("grossMargins")
-    om  = info.get("operatingMargins")
+    ev   = info.get("enterpriseValue")
+    fcf  = info.get("freeCashflow")
+    rev  = info.get("totalRevenue")
+    gm   = info.get("grossMargins")
+    om   = info.get("operatingMargins")
+    curr = info.get("currency", "USD")
+    sym  = currency_symbol(curr)
 
     def make_metrics(rows):
         return [
@@ -282,7 +321,7 @@ def analyze(ticker_symbol):
         ("FCF Margin",          score_fcf_margin(fcf, rev)),
         ("Gross Margin",        score_gross_margin(gm)),
         ("Revenue Quality",     score_rev_quality(gm, om)),
-        ("Analyst Target",      score_analyst_upside(price, info.get("targetMeanPrice"))),
+        ("Analyst Target",      score_analyst_upside(price, info.get("targetMeanPrice"), sym)),
     ])
 
     val_score    = round(sum(m["score"] for m in val_metrics)    / len(val_metrics))
@@ -313,85 +352,88 @@ def analyze(ticker_symbol):
     catalysts, risks = [], []
 
     if rg > 0.20:
-        catalysts.append(f"Revenue growing {rg*100:.0f}% YoY – well above market average; top-line momentum is the primary bull thesis")
+        catalysts.append(f"Revenue growing {rg*100:.0f}% YoY - well above market average; top-line momentum is the primary bull thesis")
     elif rg > 0.10:
-        catalysts.append(f"Solid revenue growth of {rg*100:.0f}% YoY – above-average for the sector")
+        catalysts.append(f"Solid revenue growth of {rg*100:.0f}% YoY - above-average for the sector")
     if eg > 0.25:
-        catalysts.append(f"Earnings expanding {eg*100:.0f}% YoY – operating leverage translating growth to the bottom line")
+        catalysts.append(f"Earnings expanding {eg*100:.0f}% YoY - operating leverage translating growth to the bottom line")
     if _gm > 0.55:
         catalysts.append(f"Gross margin of {_gm*100:.0f}% signals durable pricing power and a strong competitive moat")
     if _om > 0.20:
         catalysts.append(f"Operating margin of {_om*100:.0f}% reflects an efficient, scalable business model")
     if _de_act < 0:
-        catalysts.append("Net cash position – financial optionality for buybacks, dividends, or M&A without dilution")
+        catalysts.append("Net cash position - financial optionality for buybacks, dividends, or M&A without dilution")
     elif _de_act < 0.2:
-        catalysts.append("Clean balance sheet with minimal leverage – resilient through economic downturns")
+        catalysts.append("Clean balance sheet with minimal leverage - resilient through economic downturns")
     if _fcf > 0 and _rev > 0 and (_fcf / _rev) > 0.15:
-        catalysts.append(f"FCF margin of {_fcf/_rev*100:.0f}% validates earnings quality – cash generation is real")
+        catalysts.append(f"FCF margin of {_fcf/_rev*100:.0f}% validates earnings quality - cash generation is real")
     if upside > 0.20 and n_ana >= 5:
-        catalysts.append(f"Analyst consensus sees {upside*100:.0f}% upside to mean target (${target:.2f}) across {n_ana} analysts")
+        catalysts.append(f"Analyst consensus sees {upside*100:.0f}% upside to mean target ({sym}{target:.2f}) across {n_ana} analysts")
     if 0 < _peg < 1.0:
-        catalysts.append(f"PEG of {_peg:.2f} – growth is not fully reflected in the current price")
+        catalysts.append(f"PEG of {_peg:.2f} - growth is not fully reflected in the current price")
     if _roe > 0.25:
-        catalysts.append(f"ROE of {_roe*100:.0f}% – management generating strong returns on equity")
+        catalysts.append(f"ROE of {_roe*100:.0f}% - management generating strong returns on equity")
 
     if rg < -0.01:
-        risks.append(f"Revenue declining {abs(rg)*100:.0f}% YoY – structural headwind or cyclical pressure")
+        risks.append(f"Revenue declining {abs(rg)*100:.0f}% YoY - structural headwind or cyclical pressure")
     elif rg < 0.05 and _pe > 25:
-        risks.append("Low revenue growth at a premium valuation – market may be pricing in a recovery that doesn't arrive")
+        risks.append("Low revenue growth at a premium valuation - market may be pricing in a recovery that doesn't arrive")
     if _pe > 40 and _fpe > 30:
-        risks.append(f"Rich valuation (P/E {_pe:.0f}x TTM / {_fpe:.0f}x fwd) – any earnings miss could de-rate sharply")
+        risks.append(f"Rich valuation (P/E {_pe:.0f}x TTM / {_fpe:.0f}x fwd) - any earnings miss could de-rate sharply")
     elif _pe > 30:
         risks.append(f"Elevated trailing P/E of {_pe:.0f}x leaves limited margin of safety")
     if _de_act > 1.5:
-        risks.append(f"High leverage at {_de_act:.1f}x D/E – interest expense is a drag in a higher-rate environment")
+        risks.append(f"High leverage at {_de_act:.1f}x D/E - interest expense is a drag in a higher-rate environment")
     if 0 < _cr < 1.0:
-        risks.append(f"Current ratio of {_cr:.2f}x – short-term obligations exceed current assets")
+        risks.append(f"Current ratio of {_cr:.2f}x - short-term obligations exceed current assets")
     if _nm < 0:
-        risks.append("Operating at a net loss – path to profitability is the critical question")
+        risks.append("Operating at a net loss - path to profitability is the critical question")
     elif _nm < 0.05:
-        risks.append(f"Net margin of {_nm*100:.1f}% is thin – limited buffer against cost or revenue shocks")
+        risks.append(f"Net margin of {_nm*100:.1f}% is thin - limited buffer against cost or revenue shocks")
     if upside < -0.05 and n_ana >= 5:
-        risks.append(f"Analyst consensus implies downside to current price (target: ${target:.2f})")
+        risks.append(f"Analyst consensus implies downside to current price (target: {sym}{target:.2f})")
     if eg < -0.05:
-        risks.append(f"Earnings contracting {abs(eg)*100:.0f}% YoY – watch for further guidance cuts")
+        risks.append(f"Earnings contracting {abs(eg)*100:.0f}% YoY - watch for further guidance cuts")
     if _gm < 0.30:
         risks.append(f"Gross margin of {_gm*100:.0f}% signals commodity-like economics or pricing pressure")
     if rec in ("sell", "underperform", "strong_sell"):
-        risks.append("Sell/underperform analyst consensus – understand the bear thesis before sizing a position")
+        risks.append("Sell/underperform analyst consensus - understand the bear thesis before sizing a position")
 
-    catalysts = (catalysts + ["Insufficient data – review latest filings and earnings call"])[:5]
-    risks     = (risks     + ["Insufficient data – review latest filings and earnings call"])[:5]
+    catalysts = (catalysts + ["Insufficient data - review latest filings and earnings call"])[:5]
+    risks     = (risks     + ["Insufficient data - review latest filings and earnings call"])[:5]
 
+    eps = info.get("trailingEps")
     return {
-        "ticker":         ticker_symbol.upper(),
-        "name":           name,
-        "sector":         info.get("sector", "N/A"),
-        "industry":       info.get("industry", "N/A"),
-        "exchange":       info.get("exchange", ""),
-        "price":          price,
-        "change_pct":     info.get("regularMarketChangePercent"),
-        "market_cap":     fmt_large(info.get("marketCap")),
-        "revenue":        fmt_large(info.get("totalRevenue")),
-        "eps_ttm":        f"${info.get('trailingEps', 0):.2f}" if info.get("trailingEps") else "N/A",
-        "high_52w":       info.get("fiftyTwoWeekHigh"),
-        "low_52w":        info.get("fiftyTwoWeekLow"),
-        "overall":        overall,
-        "val_score":      val_score,
-        "health_score":   health_score,
-        "growth_score":   growth_score,
-        "val_metrics":    val_metrics,
-        "health_metrics": health_metrics,
-        "growth_metrics": growth_metrics,
-        "catalysts":      catalysts,
-        "risks":          risks,
-        "date":           datetime.now().strftime("%d %b %Y"),
+        "ticker":          ticker_symbol.upper(),
+        "name":            name,
+        "sector":          info.get("sector", "N/A"),
+        "industry":        info.get("industry", "N/A"),
+        "exchange":        info.get("exchange", ""),
+        "currency":        curr,
+        "currency_symbol": sym,
+        "price":           price,
+        "change_pct":      info.get("regularMarketChangePercent"),
+        "market_cap":      fmt_large(info.get("marketCap"), sym),
+        "revenue":         fmt_large(info.get("totalRevenue"), sym),
+        "eps_ttm":         f"{sym}{eps:.2f}" if eps else "N/A",
+        "high_52w":        info.get("fiftyTwoWeekHigh"),
+        "low_52w":         info.get("fiftyTwoWeekLow"),
+        "overall":         overall,
+        "val_score":       val_score,
+        "health_score":    health_score,
+        "growth_score":    growth_score,
+        "val_metrics":     val_metrics,
+        "health_metrics":  health_metrics,
+        "growth_metrics":  growth_metrics,
+        "catalysts":       catalysts,
+        "risks":           risks,
+        "date":            datetime.now().strftime("%d %b %Y"),
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 # Routes
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -409,9 +451,9 @@ def api_analyze():
         return jsonify({"error": str(e)}), 422
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 # Entry point
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

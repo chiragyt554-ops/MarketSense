@@ -349,26 +349,31 @@ body {
 <!-- ANALYZE TAB -->
 <div class="tab-pane active" id="tabAnalyze">
   <div class="search-bar">
-    <input type="text" class="search-input" id="searchInput" placeholder="Enter ticker e.g. NVDA, AAPL, MSFT…"
+    <input type="text" class="search-input" id="searchInput" placeholder="e.g. NVDA · AAPL · DCP.JO · SOL.JO · SHEL.L"
            autocomplete="off" autocapitalize="characters" spellcheck="false"
            onkeydown="if(event.key==='Enter')runAnalysis()">
     <button class="search-btn" id="searchBtn" onclick="runAnalysis()">Analyze</button>
   </div>
   <div class="quick-chips">
+    <span style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;align-self:center">US</span>
     <span class="chip" onclick="quickAnalyze('NVDA')">NVDA</span>
     <span class="chip" onclick="quickAnalyze('AAPL')">AAPL</span>
     <span class="chip" onclick="quickAnalyze('MSFT')">MSFT</span>
     <span class="chip" onclick="quickAnalyze('TSLA')">TSLA</span>
     <span class="chip" onclick="quickAnalyze('AMZN')">AMZN</span>
-    <span class="chip" onclick="quickAnalyze('GOOGL')">GOOGL</span>
-    <span class="chip" onclick="quickAnalyze('META')">META</span>
+    <span style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;align-self:center;margin-left:6px">JSE</span>
+    <span class="chip" onclick="quickAnalyze('DCP.JO')">DCP.JO</span>
+    <span class="chip" onclick="quickAnalyze('NPN.JO')">NPN.JO</span>
+    <span class="chip" onclick="quickAnalyze('SOL.JO')">SOL.JO</span>
+    <span class="chip" onclick="quickAnalyze('BTI.JO')">BTI.JO</span>
+    <span class="chip" onclick="quickAnalyze('SBK.JO')">SBK.JO</span>
   </div>
 
   <!-- Welcome state -->
   <div class="state" id="stateWelcome">
     <div class="state-icon">📈</div>
     <h2>Stock Risk Analyzer</h2>
-    <p>Three-pillar framework: Valuation · Financial Health · Growth.<br>Search any US ticker to get started.</p>
+    <p>Three-pillar framework: Valuation · Financial Health · Growth.<br>US tickers work as-is. For JSE add <strong>.JO</strong> (e.g. DCP.JO), LSE add <strong>.L</strong>, ASX add <strong>.AX</strong>.</p>
   </div>
 
   <!-- Loading state -->
@@ -520,6 +525,7 @@ function addToWatchlist(data) {
     overall: data.overall, val_score: data.val_score,
     health_score: data.health_score, growth_score: data.growth_score,
     price: data.price, change_pct: data.change_pct,
+    currency_symbol: data.currency_symbol || '$',
     savedAt: Date.now()
   };
   saveWatchlist(wl);
@@ -589,7 +595,7 @@ function wlCard(item) {
         </div>
       </div>
       <div style="text-align:right">
-        <div style="font-size:18px;font-weight:700">$${item.price != null ? item.price.toFixed(2) : '—'}</div>
+        <div style="font-size:18px;font-weight:700">${item.currency_symbol || '$'}${item.price != null ? item.price.toFixed(2) : '—'}</div>
         <div>${chgHtml}</div>
       </div>
     </div>
@@ -663,7 +669,7 @@ function renderResults(d) {
   if (d.low_52w && d.high_52w && d.high_52w !== d.low_52w) {
     const pct = Math.max(0, Math.min(100, (d.price - d.low_52w) / (d.high_52w - d.low_52w) * 100));
     rangeHtml = `<div class="range-row">
-      <div class="range-labels"><span>$${d.low_52w.toFixed(2)}</span><span style="color:var(--text-dim)">52W Range</span><span>$${d.high_52w.toFixed(2)}</span></div>
+      <div class="range-labels"><span>${d.currency_symbol}${d.low_52w.toFixed(2)}</span><span style="color:var(--text-dim)">52W Range</span><span>${d.currency_symbol}${d.high_52w.toFixed(2)}</span></div>
       <div class="range-track">
         <div class="range-fill" style="width:${pct.toFixed(1)}%;background:${col}"></div>
         <div class="range-dot" style="left:${pct.toFixed(1)}%;background:${col}"></div>
@@ -682,7 +688,7 @@ function renderResults(d) {
     <div class="hero-info">
       <div class="hero-name">${d.name}</div>
       <div class="hero-sub">${d.exchange ? d.exchange + ': ' : ''}<strong>${d.ticker}</strong> &nbsp;·&nbsp; ${d.sector} &nbsp;·&nbsp; ${d.industry}</div>
-      <div class="hero-price">$${d.price.toFixed(2)}</div>
+      <div class="hero-price">${d.currency_symbol}${d.price.toFixed(2)}</div>
       ${chgHtml}
       ${rangeHtml}
       <div class="hero-stats">
