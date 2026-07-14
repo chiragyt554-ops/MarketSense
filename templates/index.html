@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MarketSense – Stock Risk Analyzer</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0F172A;
+  --surface:   #1E293B;
+  --surface2:  #273548;
+  --border:    #334155;
+  --teal:      #14B8A6;
+  --teal-dim:  rgba(20,184,166,0.15);
+  --text:      #F1F5F9;
+  --text-muted:#94A3B8;
+  --text-dim:  #64748B;
+  --green:     #10B981;
+  --red:       #EF4444;
+  --amber:     #F59E0B;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Nav ── */
+.nav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  text-decoration: none;
+}
+.nav-brand span { color: var(--teal); }
+.nav-tabs {
+  display: flex;
+  gap: 4px;
+}
+.nav-tab {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  transition: all .15s;
+}
+.nav-tab.active {
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+.nav-tab:hover:not(.active) { background: var(--surface2); color: var(--text); }
+
+/* ── Tabs ── */
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ── Analyze tab ── */
+.search-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.search-input {
+  flex: 1;
+  max-width: 480px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s;
+  caret-color: var(--teal);
+}
+.search-input::placeholder { color: var(--text-dim); font-weight: 400; }
+.search-input:focus { border-color: var(--teal); }
+.search-btn {
+  padding: 10px 24px;
+  background: var(--teal);
+  color: #0F172A;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .15s;
+  white-space: nowrap;
+}
+.search-btn:hover { opacity: .88; }
+.search-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.quick-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.chip {
+  padding: 5px 14px;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.chip:hover { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); }
+
+/* ── States ── */
+.state { display: flex; flex-direction: column; align-items: center; justify-content: center;
+         padding: 80px 20px; text-align: center; }
+.state-icon { font-size: 52px; margin-bottom: 16px; }
+.state h2 { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.state p  { font-size: 14px; color: var(--text-muted); max-width: 380px; line-height: 1.6; }
+
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--teal);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  margin-bottom: 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Results ── */
+.results { max-width: 1040px; margin: 0 auto; padding: 24px 20px 80px; }
+
+.hero-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.score-ring { flex-shrink: 0; text-align: center; }
+.score-ring svg { display: block; }
+.score-label { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+
+.hero-info { flex: 1; min-width: 200px; }
+.hero-name { font-size: 26px; font-weight: 800; color: var(--text); }
+.hero-sub  { font-size: 13px; color: var(--text-muted); margin: 4px 0 16px; }
+.hero-price { font-size: 36px; font-weight: 800; }
+.hero-change { font-size: 14px; font-weight: 600; margin-top: 2px; }
+.range-row { margin-top: 12px; }
+.range-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
+.range-track { height: 5px; background: var(--border); border-radius: 3px; position: relative; }
+.range-fill  { height: 100%; border-radius: 3px; position: absolute; top: 0; left: 0; }
+.range-dot   { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--surface); position: absolute; top: -4px; transform: translateX(-50%); }
+
+.hero-stats { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 18px; }
+.hero-stat label { font-size: 10px; text-transform: uppercase; color: var(--text-dim); display: block; }
+.hero-stat span  { font-size: 15px; font-weight: 600; }
+
+.pillar-mini { flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
+.mini-row    { display: flex; align-items: center; gap: 12px; }
+.mini-circle { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center;
+               justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.mini-label  { font-size: 12px; font-weight: 600; }
+.mini-band   { font-size: 10px; font-weight: 500; }
+
+.watchlist-btn {
+  margin-top: 14px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  transition: all .15s;
+}
+.watchlist-btn.saved { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); }
+.watchlist-btn:hover { border-color: var(--teal); color: var(--teal); }
+
+/* ── Pillar cards ── */
+.pillars { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 20px; }
+@media(max-width:840px) { .pillars { grid-template-columns: 1fr; } }
+
+.pillar-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+}
+.pillar-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.pillar-title  { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.pillar-weight { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+
+.metric-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.metric-row:last-child { border-bottom: none; }
+.metric-name { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+.metric-note { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.metric-val  { font-size: 13px; font-weight: 600; text-align: right; white-space: nowrap; }
+.tag-badge   { font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 2px 6px;
+               border-radius: 3px; cursor: help; }
+.score-chip  { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center;
+               justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+
+/* ── Catalysts & Risks ── */
+.cr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+@media(max-width:640px) { .cr-grid { grid-template-columns: 1fr; } }
+
+.cr-card { border-radius: 14px; padding: 20px; }
+.cr-card.cat { background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.25); }
+.cr-card.risk { background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.25); }
+.cr-heading { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+              margin-bottom: 12px; }
+.cr-card.cat  .cr-heading { color: var(--green); }
+.cr-card.risk .cr-heading { color: var(--red); }
+.cr-item { font-size: 13px; line-height: 1.55; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+.cr-item:last-child { border-bottom: none; }
+.cr-card.cat  .cr-item { color: #6ee7b7; }
+.cr-card.risk .cr-item { color: #fca5a5; }
+
+/* ── Bottom line ── */
+.bottom-line {
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.bl-heading { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--teal); margin-bottom: 8px; }
+.bl-text    { font-size: 14px; line-height: 1.7; color: var(--text-muted); }
+.bl-text strong { color: var(--text); }
+
+.disclaimer { text-align: center; font-size: 11px; color: var(--text-dim); line-height: 1.6; padding: 8px 0 24px; }
+
+/* ── Watchlist tab ── */
+.watchlist-pane { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
+.wl-header { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+.wl-sub    { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+
+.wl-empty { display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 80px 20px; text-align: center; }
+.wl-empty-icon { font-size: 48px; margin-bottom: 16px; }
+.wl-empty h3   { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.wl-empty p    { font-size: 13px; color: var(--text-muted); max-width: 320px; line-height: 1.6; }
+
+.wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap: 14px; }
+
+.wl-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  cursor: pointer;
+  transition: border-color .15s, transform .1s;
+  position: relative;
+}
+.wl-card:hover { border-color: var(--teal); transform: translateY(-1px); }
+.wl-card-ticker { font-size: 18px; font-weight: 800; color: var(--text); }
+.wl-card-name   { font-size: 12px; color: var(--text-muted); margin: 2px 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wl-card-row    { display: flex; align-items: center; justify-content: space-between; }
+.wl-card-score  { display: flex; align-items: center; gap: 8px; }
+.wl-score-num   { font-size: 22px; font-weight: 800; }
+.wl-score-band  { font-size: 11px; font-weight: 600; }
+.wl-remove { position: absolute; top: 12px; right: 12px; width: 24px; height: 24px;
+             border-radius: 50%; background: rgba(239,68,68,.15); border: none; color: #ef4444;
+             font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+             transition: background .15s; }
+.wl-remove:hover { background: rgba(239,68,68,.35); }
+.wl-analyze-hint { font-size: 11px; color: var(--text-dim); margin-top: 10px; }
+
+/* ── Tooltip ── */
+#__tip {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  max-width: 280px;
+  background: #1E293B;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+  pointer-events: none;
+}
+.tip-btn {
+  width: 15px; height: 15px; border-radius: 50%; border: none; cursor: pointer;
+  font-size: 9px; font-weight: 800; display: inline-flex; align-items: center;
+  justify-content: center; vertical-align: middle; flex-shrink: 0; margin-left: 4px;
+  background: var(--surface2); color: var(--text-dim); transition: all .15s;
+}
+.tip-btn:hover { background: var(--teal); color: var(--bg); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">📊 Market<span>Sense</span></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="tabAnalyzeBtn" onclick="switchTab('analyze')">Analyze</button>
+    <button class="nav-tab" id="tabWatchlistBtn" onclick="switchTab('watchlist')">
+      Watchlist <span id="wlCount" style="display:none;background:var(--teal);color:#0f172a;font-size:10px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:4px;"></span>
+    </button>
+  </div>
+</nav>
+
+<!-- ANALYZE TAB -->
+<div class="tab-pane active" id="tabAnalyze">
+  <div class="search-bar">
+    <input type="text" class="search-input" id="searchInput" placeholder="Enter ticker e.g. NVDA, AAPL, MSFT…"
+           autocomplete="off" autocapitalize="characters" spellcheck="false"
+           onkeydown="if(event.key==='Enter')runAnalysis()">
+    <button class="search-btn" id="searchBtn" onclick="runAnalysis()">Analyze</button>
+  </div>
+  <div class="quick-chips">
+    <span class="chip" onclick="quickAnalyze('NVDA')">NVDA</span>
+    <span class="chip" onclick="quickAnalyze('AAPL')">AAPL</span>
+    <span class="chip" onclick="quickAnalyze('MSFT')">MSFT</span>
+    <span class="chip" onclick="quickAnalyze('TSLA')">TSLA</span>
+    <span class="chip" onclick="quickAnalyze('AMZN')">AMZN</span>
+    <span class="chip" onclick="quickAnalyze('GOOGL')">GOOGL</span>
+    <span class="chip" onclick="quickAnalyze('META')">META</span>
+  </div>
+
+  <!-- Welcome state -->
+  <div class="state" id="stateWelcome">
+    <div class="state-icon">📈</div>
+    <h2>Stock Risk Analyzer</h2>
+    <p>Three-pillar framework: Valuation · Financial Health · Growth.<br>Search any US ticker to get started.</p>
+  </div>
+
+  <!-- Loading state -->
+  <div class="state" id="stateLoading" style="display:none">
+    <div class="spinner"></div>
+    <p id="loadingText">Fetching data…</p>
+  </div>
+
+  <!-- Error state -->
+  <div class="state" id="stateError" style="display:none">
+    <div class="state-icon">⚠️</div>
+    <h2 id="errorTitle">Something went wrong</h2>
+    <p id="errorMsg"></p>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="stateResults" style="display:none"></div>
+</div>
+
+<!-- WATCHLIST TAB -->
+<div class="tab-pane" id="tabWatchlist">
+  <div class="watchlist-pane">
+    <div class="wl-header">⭐ Watchlist</div>
+    <div class="wl-sub">Stocks you're watching. Tap a card to run a fresh analysis.</div>
+    <div id="wlContent"></div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div id="__tip"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants / helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const WL_KEY = 'ms_watchlist_v2';
+
+const TOOLTIPS = {
+  "P/E TTM": "Price-to-Earnings (Trailing Twelve Months). How much you pay per $1 of profit the company actually earned over the last 12 months. Lower is generally cheaper, but always check the growth rate alongside it.",
+  "Forward P/E": "Price-to-Earnings based on next year's estimated earnings. If lower than the TTM P/E, the market expects earnings to grow. Treat it as directional — analyst estimates get revised.",
+  "PEG Ratio": "Price/Earnings-to-Growth. Takes the P/E and divides by the annual earnings growth rate. A PEG below 1.0 suggests the stock may be cheap relative to how fast earnings are growing.",
+  "Price / Sales": "Market cap divided by annual revenue. Useful for companies with little or no earnings yet. Lower = cheaper relative to revenue, but high-margin businesses naturally command higher multiples.",
+  "EV / EBITDA": "Enterprise Value divided by EBITDA. A favourite acquisition metric because EV accounts for debt and cash. Below 10x is often value territory; above 30x is expensive.",
+  "EV / FCF": "Enterprise Value divided by Free Cash Flow. Often considered the most honest valuation metric because FCF is harder to manipulate than reported earnings.",
+  "Debt / Equity": "Total debt divided by shareholders equity. Shows how much the company funds itself through borrowing. Lower is generally safer — high leverage amplifies both gains and losses.",
+  "Current Ratio": "Current assets divided by current liabilities. Measures whether the company can pay its bills over the next 12 months. Below 1.0x means short-term obligations exceed current assets.",
+  "Net Margin": "Net profit as a percentage of revenue. Of every $1 in sales, how many cents become actual profit after all costs, interest and tax. Higher signals stronger, more defensible economics.",
+  "Return on Equity": "Net profit divided by shareholders equity. Measures how efficiently management uses shareholders' money. Above 15-20% is generally considered strong.",
+  "Gross Margin": "Revenue minus direct production costs, as a percentage of revenue. Reflects pricing power. Software firms run 70-80%+; retailers 20-30%. Higher margins give more room to invest.",
+  "Operating Margin": "Operating profit after production costs and overhead, before interest and tax. Rising margins over time suggest the business is scaling efficiently.",
+  "Revenue Growth YoY": "The percentage change in annual revenue vs. the same period last year. Sustained double-digit growth is rare and typically commands a valuation premium.",
+  "Earnings Growth YoY": "The percentage change in EPS vs. the same period last year. When earnings grow faster than revenue, it signals operating leverage and improving profitability.",
+  "FCF Margin": "Free Cash Flow as a percentage of revenue. Shows how much of each dollar of sales converts to real, spendable cash after all capex. Harder to manipulate than reported earnings.",
+  "Revenue Quality": "Measures how efficiently the company converts gross profit into operating profit (operating margin ÷ gross margin). High conversion = lean, low-overhead business.",
+  "Analyst Target": "The average 12-month price target from analysts who cover the stock, and implied upside/downside. Use as one data point — analysts are often anchored to recent price action.",
+  "LOCK": "Structural metric — reliable, consistent, and comparable across time. Figures come from audited financials and are hard to manipulate. Weight these heavily.",
+  "FLEX": "Situational metric — useful context, but interpret alongside industry norms, company stage, and sector. Often rely on estimates or vary widely by business model.",
+};
+
+function scoreColor(s) {
+  if (s >= 80) return '#10B981';
+  if (s >= 65) return '#65a30d';
+  if (s >= 50) return '#F59E0B';
+  if (s >= 35) return '#ea580c';
+  return '#EF4444';
+}
+
+function scoreBand(s) {
+  if (s >= 80) return 'Low Risk';
+  if (s >= 65) return 'Low-Mod';
+  if (s >= 50) return 'Moderate';
+  if (s >= 35) return 'Mod-High';
+  return 'High Risk';
+}
+
+function ringHTML(score, size=130, sw=10) {
+  const c = size / 2, r = c - sw;
+  const circ = 2 * Math.PI * r;
+  const dash = circ * (1 - score / 100);
+  const col = scoreColor(score);
+  const fs = Math.round(size / 6) + 2;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#1E293B" stroke-width="${sw}"/>
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${sw}"
+      stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${dash.toFixed(1)}"
+      stroke-linecap="round" transform="rotate(-90 ${c} ${c})"/>
+    <text x="${c}" y="${c + fs/2}" text-anchor="middle" font-size="${fs}"
+      font-weight="800" fill="${col}" font-family="-apple-system,sans-serif">${score}</text>
+  </svg>`;
+}
+
+function smallRing(score, size=70, sw=6) {
+  const c = size / 2, r = c - sw;
+  const circ = 2 * Math.PI * r;
+  const dash = circ * (1 - score / 100);
+  const col = scoreColor(score);
+  const fs = Math.round(size / 5);
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#1E293B" stroke-width="${sw}"/>
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${sw}"
+      stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${dash.toFixed(1)}"
+      stroke-linecap="round" transform="rotate(-90 ${c} ${c})"/>
+    <text x="${c}" y="${c + fs/2}" text-anchor="middle" font-size="${fs}"
+      font-weight="800" fill="${col}" font-family="-apple-system,sans-serif">${score}</text>
+  </svg>`;
+}
+
+function tipBtn(label) {
+  const tip = TOOLTIPS[label];
+  if (!tip) return '';
+  const safe = tip.replace(/"/g, '&quot;');
+  return `<button class="tip-btn" data-tip="${safe}">?</button>`;
+}
+
+function tagBadge(tag) {
+  const col = tag === 'LOCK' ? '#3b82f6' : '#8b5cf6';
+  const tip = (TOOLTIPS[tag] || '').replace(/"/g, '&quot;');
+  return `<span class="tag-badge" style="background:${col}22;color:${col}" data-tip="${tip}">${tag}</span>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab switching
+// ─────────────────────────────────────────────────────────────────────────────
+function switchTab(t) {
+  document.getElementById('tabAnalyze').classList.toggle('active', t === 'analyze');
+  document.getElementById('tabWatchlist').classList.toggle('active', t === 'watchlist');
+  document.getElementById('tabAnalyzeBtn').classList.toggle('active', t === 'analyze');
+  document.getElementById('tabWatchlistBtn').classList.toggle('active', t === 'watchlist');
+  if (t === 'watchlist') renderWatchlist();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Watchlist (localStorage)
+// ─────────────────────────────────────────────────────────────────────────────
+function loadWatchlist() {
+  try { return JSON.parse(localStorage.getItem(WL_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveWatchlist(wl) {
+  localStorage.setItem(WL_KEY, JSON.stringify(wl));
+}
+function isInWatchlist(ticker) {
+  return !!loadWatchlist()[ticker];
+}
+function addToWatchlist(data) {
+  const wl = loadWatchlist();
+  wl[data.ticker] = {
+    ticker: data.ticker, name: data.name,
+    overall: data.overall, val_score: data.val_score,
+    health_score: data.health_score, growth_score: data.growth_score,
+    price: data.price, change_pct: data.change_pct,
+    savedAt: Date.now()
+  };
+  saveWatchlist(wl);
+  updateWlCount();
+}
+function removeFromWatchlist(ticker) {
+  const wl = loadWatchlist();
+  delete wl[ticker];
+  saveWatchlist(wl);
+  updateWlCount();
+}
+function updateWlCount() {
+  const wl = loadWatchlist();
+  const n = Object.keys(wl).length;
+  const el = document.getElementById('wlCount');
+  el.textContent = n;
+  el.style.display = n ? 'inline' : 'none';
+}
+function toggleWatchlist(data) {
+  if (isInWatchlist(data.ticker)) {
+    removeFromWatchlist(data.ticker);
+  } else {
+    addToWatchlist(data);
+  }
+  updateWatchlistBtn(data.ticker);
+}
+function updateWatchlistBtn(ticker) {
+  const btn = document.getElementById('wlBtn');
+  if (!btn) return;
+  const saved = isInWatchlist(ticker);
+  btn.textContent = saved ? '⭐ Saved to Watchlist' : '☆ Add to Watchlist';
+  btn.classList.toggle('saved', saved);
+}
+
+function renderWatchlist() {
+  const wl = loadWatchlist();
+  const items = Object.values(wl).sort((a,b) => b.savedAt - a.savedAt);
+  const el = document.getElementById('wlContent');
+  if (!items.length) {
+    el.innerHTML = `<div class="wl-empty">
+      <div class="wl-empty-icon">⭐</div>
+      <h3>Your watchlist is empty</h3>
+      <p>Analyze a stock and tap "Add to Watchlist" to save it here.</p>
+    </div>`;
+    return;
+  }
+  el.innerHTML = `<div class="wl-grid">${items.map(wlCard).join('')}</div>`;
+}
+
+function wlCard(item) {
+  const col = scoreColor(item.overall);
+  const band = scoreBand(item.overall);
+  const chg = item.change_pct;
+  const chgHtml = chg != null
+    ? `<span style="font-size:12px;font-weight:600;color:${chg >= 0 ? '#10B981' : '#EF4444'}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>`
+    : '';
+  return `<div class="wl-card" onclick="openFromWatchlist('${item.ticker}')">
+    <button class="wl-remove" onclick="event.stopPropagation();removeCard('${item.ticker}')" title="Remove">×</button>
+    <div class="wl-card-ticker">${item.ticker}</div>
+    <div class="wl-card-name">${item.name || ''}</div>
+    <div class="wl-card-row">
+      <div class="wl-card-score">
+        ${smallRing(item.overall, 52, 5)}
+        <div>
+          <div class="wl-score-num" style="color:${col}">${item.overall}</div>
+          <div class="wl-score-band" style="color:${col}">${band}</div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:18px;font-weight:700">$${item.price != null ? item.price.toFixed(2) : '—'}</div>
+        <div>${chgHtml}</div>
+      </div>
+    </div>
+    <div class="wl-analyze-hint">Tap to re-analyze →</div>
+  </div>`;
+}
+
+function removeCard(ticker) {
+  removeFromWatchlist(ticker);
+  renderWatchlist();
+}
+
+function openFromWatchlist(ticker) {
+  switchTab('analyze');
+  document.getElementById('searchInput').value = ticker;
+  runAnalysis();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Analysis
+// ─────────────────────────────────────────────────────────────────────────────
+let currentData = null;
+
+function quickAnalyze(ticker) {
+  document.getElementById('searchInput').value = ticker;
+  runAnalysis();
+}
+
+async function runAnalysis() {
+  const ticker = document.getElementById('searchInput').value.trim().toUpperCase();
+  if (!ticker) return;
+
+  showState('loading');
+  document.getElementById('loadingText').textContent = `Fetching ${ticker}…`;
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true; btn.textContent = 'Loading…';
+
+  try {
+    const res = await fetch(`/api/analyze?ticker=${encodeURIComponent(ticker)}`);
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Unknown error');
+    currentData = data;
+    renderResults(data);
+    showState('results');
+  } catch(e) {
+    document.getElementById('errorTitle').textContent = `Could not load "${ticker}"`;
+    document.getElementById('errorMsg').textContent = e.message;
+    showState('error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Analyze';
+  }
+}
+
+function showState(s) {
+  ['welcome','loading','error','results'].forEach(id => {
+    const el = document.getElementById('state' + id.charAt(0).toUpperCase() + id.slice(1));
+    if (el) el.style.display = id === s ? (id === 'results' ? 'block' : 'flex') : 'none';
+  });
+}
+
+function renderResults(d) {
+  const col = scoreColor(d.overall);
+  const band = scoreBand(d.overall);
+  const chg = d.change_pct;
+  const chgHtml = chg != null
+    ? `<div class="hero-change" style="color:${chg >= 0 ? '#10B981':'#EF4444'}">${chg >= 0?'+':''}${chg.toFixed(2)}%</div>`
+    : '';
+
+  // 52W range
+  let rangeHtml = '';
+  if (d.low_52w && d.high_52w && d.high_52w !== d.low_52w) {
+    const pct = Math.max(0, Math.min(100, (d.price - d.low_52w) / (d.high_52w - d.low_52w) * 100));
+    rangeHtml = `<div class="range-row">
+      <div class="range-labels"><span>$${d.low_52w.toFixed(2)}</span><span style="color:var(--text-dim)">52W Range</span><span>$${d.high_52w.toFixed(2)}</span></div>
+      <div class="range-track">
+        <div class="range-fill" style="width:${pct.toFixed(1)}%;background:${col}"></div>
+        <div class="range-dot" style="left:${pct.toFixed(1)}%;background:${col}"></div>
+      </div>
+    </div>`;
+  }
+
+  const saved = isInWatchlist(d.ticker);
+
+  const hero = `<div class="hero-card">
+    <div class="score-ring">
+      ${ringHTML(d.overall)}
+      <div class="score-label" style="color:${col};font-weight:700">${band}</div>
+      <div class="score-label">Overall Score</div>
+    </div>
+    <div class="hero-info">
+      <div class="hero-name">${d.name}</div>
+      <div class="hero-sub">${d.exchange ? d.exchange + ': ' : ''}<strong>${d.ticker}</strong> &nbsp;·&nbsp; ${d.sector} &nbsp;·&nbsp; ${d.industry}</div>
+      <div class="hero-price">$${d.price.toFixed(2)}</div>
+      ${chgHtml}
+      ${rangeHtml}
+      <div class="hero-stats">
+        <div class="hero-stat"><label>Market Cap</label><span>${d.market_cap}</span></div>
+        <div class="hero-stat"><label>TTM Revenue</label><span>${d.revenue}</span></div>
+        <div class="hero-stat"><label>EPS TTM</label><span>${d.eps_ttm}</span></div>
+      </div>
+      <button class="watchlist-btn ${saved ? 'saved' : ''}" id="wlBtn" onclick="toggleWatchlist(currentData)">
+        ${saved ? '⭐ Saved to Watchlist' : '☆ Add to Watchlist'}
+      </button>
+    </div>
+    <div class="pillar-mini">
+      <div style="font-size:10px;text-transform:uppercase;color:var(--text-dim);font-weight:700;margin-bottom:4px">Pillar Scores</div>
+      ${miniRow('◆ Valuation', d.val_score)}
+      ${miniRow('◆ Fin. Health', d.health_score)}
+      ${miniRow('▲ Growth', d.growth_score)}
+    </div>
+  </div>`;
+
+  const pillars = `<div class="pillars">
+    ${pillarCard('Valuation', '◆', 35, d.val_score, d.val_metrics)}
+    ${pillarCard('Financial Health', '◆', 35, d.health_score, d.health_metrics)}
+    ${pillarCard('Growth', '▲', 30, d.growth_score, d.growth_metrics)}
+  </div>`;
+
+  const catalysts = d.catalysts.map(c => `<div class="cr-item">✦ ${c}</div>`).join('');
+  const risks = d.risks.map(r => `<div class="cr-item">▲ ${r}</div>`).join('');
+  const crGrid = `<div class="cr-grid">
+    <div class="cr-card cat"><div class="cr-heading">✦ Key Catalysts</div>${catalysts}</div>
+    <div class="cr-card risk"><div class="cr-heading">▲ Key Risks</div>${risks}</div>
+  </div>`;
+
+  // Bottom line text
+  const va = d.val_score >= 75 ? 'attractively valued' : d.val_score >= 60 ? 'fairly valued' : d.val_score >= 45 ? 'pricing in a lot of good news' : 'carrying significant valuation risk';
+  const ha = d.health_score >= 80 ? 'a fortress balance sheet' : d.health_score >= 65 ? 'solid financial health' : d.health_score >= 50 ? 'adequate but not exceptional financials' : 'financial health concerns to monitor';
+  const ga = d.growth_score >= 80 ? 'exceptional growth momentum' : d.growth_score >= 65 ? 'a solid growth trajectory' : d.growth_score >= 50 ? 'moderate growth' : 'weak or deteriorating growth metrics';
+  const vt = d.overall >= 65 ? 'a lower-risk hold for investors with the right time horizon and appropriate position sizing' : d.overall >= 45 ? 'a position that warrants careful sizing — monitor the key risk flags closely before adding' : 'a higher-risk profile requiring thorough due diligence before taking a position';
+  const blText = `${d.name} (${d.ticker}) scores <strong>${d.overall}/100</strong>, placing it in the <strong style="color:${col}">${band}</strong> band. The stock appears ${va} (Valuation: ${d.val_score}/100), supported by ${ha} (Financial Health: ${d.health_score}/100), and shows ${ga} (Growth: ${d.growth_score}/100). Taken together, this is ${vt}. Cross-reference with the latest filings and earnings call before taking a position.`;
+
+  const bottomLine = `<div class="bottom-line">
+    <div class="bl-heading">⊕ Bottom Line</div>
+    <div class="bl-text">${blText}</div>
+  </div>`;
+
+  const disclaimer = `<div class="disclaimer">Analysis generated ${d.date} · Data via Yahoo Finance<br><strong>For informational purposes only. Not financial advice.</strong></div>`;
+
+  document.getElementById('stateResults').innerHTML = hero + pillars + crGrid + bottomLine + disclaimer;
+  updateWlCount();
+}
+
+function miniRow(label, score) {
+  const col = scoreColor(score);
+  return `<div class="mini-row">
+    <div class="mini-circle" style="background:${col}22;color:${col}">${score}</div>
+    <div>
+      <div class="mini-label">${label}</div>
+      <div class="mini-band" style="color:${col}">${scoreBand(score)}</div>
+    </div>
+  </div>`;
+}
+
+function pillarCard(title, icon, weight, score, metrics) {
+  const col = scoreColor(score);
+  const rows = metrics.map(m => {
+    const mc = scoreColor(m.score);
+    return `<div class="metric-row">
+      <div>
+        <div class="metric-name">${m.label}${tipBtn(m.label)}</div>
+        <div class="metric-note">${m.note}</div>
+      </div>
+      <div class="metric-val">${m.value}</div>
+      ${tagBadge(m.tag)}
+      <div class="score-chip" style="background:${mc}22;color:${mc}">${m.score}</div>
+    </div>`;
+  }).join('');
+  return `<div class="pillar-card">
+    <div class="pillar-header">
+      <div>
+        <div class="pillar-title">${icon} ${title}</div>
+        <div class="pillar-weight">Weight ${weight}% · 6 metrics</div>
+      </div>
+      <div style="text-align:center">
+        ${smallRing(score, 72, 6)}
+        <div style="font-size:10px;font-weight:700;color:${col};margin-top:2px">${scoreBand(score)}</div>
+      </div>
+    </div>
+    <div>${rows}</div>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tooltip
+// ─────────────────────────────────────────────────────────────────────────────
+(function() {
+  const tip = document.getElementById('__tip');
+  let src = null;
+  function show(el) {
+    const text = el.getAttribute('data-tip');
+    if (!text) return;
+    tip.textContent = text;
+    tip.style.display = 'block';
+    src = el;
+    pos(el);
+  }
+  function hide() { tip.style.display = 'none'; src = null; }
+  function pos(el) {
+    const r = el.getBoundingClientRect();
+    const w = 280;
+    let l = r.left + r.width/2 - w/2;
+    let t = r.bottom + 10;
+    if (l < 8) l = 8;
+    if (l + w > window.innerWidth - 8) l = window.innerWidth - w - 8;
+    if (t + 160 > window.innerHeight) t = r.top - 168;
+    tip.style.top = t + 'px';
+    tip.style.left = l + 'px';
+  }
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) { e.stopPropagation(); src === el ? hide() : show(el); }
+    else hide();
+  });
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el) show(el);
+  });
+  document.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-tip]');
+    if (el && el.tagName !== 'BUTTON') hide();
+  });
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────────────────
+updateWlCount();
+</script>
+</body>
+</html>
