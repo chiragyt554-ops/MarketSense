@@ -210,6 +210,24 @@ body {
 }
 .watchlist-btn.saved { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); }
 .watchlist-btn:hover { border-color: var(--teal); color: var(--teal); }
+.balance-sheet-btn {
+  margin-top: 14px;
+  margin-left: 8px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all .15s;
+}
+.balance-sheet-btn:hover { border-color: #3b82f6; color: #3b82f6; background: rgba(59,130,246,.12); }
 
 /* ── Pillar cards ── */
 .pillars { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 20px; }
@@ -367,6 +385,15 @@ body {
     <span class="chip" onclick="quickAnalyze('SOL.JO')">SOL.JO</span>
     <span class="chip" onclick="quickAnalyze('BTI.JO')">BTI.JO</span>
     <span class="chip" onclick="quickAnalyze('SBK.JO')">SBK.JO</span>
+  </div>
+
+  <!-- Exchange format guide -->
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:8px 20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+    <span style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Ticker formats</span>
+    <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">NASDAQ / NYSE</span> &nbsp;AAPL, NVDA, MSFT</span>
+    <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">JSE</span> &nbsp;TICKER<span style="color:var(--teal);font-weight:700">.JO</span> &nbsp;e.g. DCP.JO</span>
+    <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">LSE</span> &nbsp;TICKER<span style="color:var(--teal);font-weight:700">.L</span> &nbsp;e.g. SHEL.L</span>
+    <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">ASX</span> &nbsp;TICKER<span style="color:var(--teal);font-weight:700">.AX</span> &nbsp;e.g. CBA.AX</span>
   </div>
 
   <!-- Welcome state -->
@@ -696,9 +723,14 @@ function renderResults(d) {
         <div class="hero-stat"><label>TTM Revenue</label><span>${d.revenue}</span></div>
         <div class="hero-stat"><label>EPS TTM</label><span>${d.eps_ttm}</span></div>
       </div>
-      <button class="watchlist-btn ${saved ? 'saved' : ''}" id="wlBtn" onclick="toggleWatchlist(currentData)">
-        ${saved ? '⭐ Saved to Watchlist' : '☆ Add to Watchlist'}
-      </button>
+      <div style="display:flex;align-items:center;flex-wrap:wrap">
+        <button class="watchlist-btn ${saved ? 'saved' : ''}" id="wlBtn" onclick="toggleWatchlist(currentData)">
+          ${saved ? '⭐ Saved to Watchlist' : '☆ Add to Watchlist'}
+        </button>
+        <a class="balance-sheet-btn" href="https://finance.yahoo.com/quote/${d.ticker}/balance-sheet" target="_blank" rel="noopener">
+          📋 Balance Sheet
+        </a>
+      </div>
     </div>
     <div class="pillar-mini">
       <div style="font-size:10px;text-transform:uppercase;color:var(--text-dim);font-weight:700;margin-bottom:4px">Pillar Scores</div>
