@@ -121,6 +121,18 @@ def score_ev_fcf(ev, fcf):
             "Rich" if ratio < 75 else "Very rich" if ratio < 100 else "Extreme premium")
     return s, fmt_x(ratio), note, "FLEX"
 
+def score_analyst_upside(current, target, sym="$"):
+    if current is None or target is None or current == 0:
+        return 50, "N/A", "No analyst target", "FLEX"
+    upside = (target - current) / current
+    s = bracket(upside, [(-0.20,15),(-0.05,30),(0.0,45),(0.05,55),(0.10,64),
+                         (0.20,73),(0.35,82),(0.50,90),(9,96)])
+    note = ("Strong downside implied" if upside < -0.20 else "Analysts cautious" if upside < -0.05 else
+            "At/near consensus target" if upside < 0.05 else "Modest upside" if upside < 0.10 else
+            "Moderate upside" if upside < 0.20 else "Good upside" if upside < 0.35 else
+            "Strong upside" if upside < 0.50 else "Very strong upside")
+    return s, f"{sym}{target:.2f} ({upside:+.0%})", note, "FLEX"
+
 
 # -- Financial Health --------------------------------------------------------
 def score_de_ratio(de):
@@ -144,6 +156,15 @@ def score_current_ratio(cr):
             "Borderline" if cr < 1.2 else "Adequate" if cr < 1.5 else
             "Comfortable" if cr < 2.0 else "Strong" if cr < 3.0 else "Very strong")
     return s, f"{cr:.2f}x", note, "FLEX"
+
+def score_quick_ratio(qr):
+    if qr is None:
+        return 50, "N/A", "No quick ratio data", "FLEX"
+    s = bracket(qr, [(0.5,22),(0.8,42),(1.0,60),(1.2,70),(1.5,78),(2.0,86),(3.0,90),(9999,88)])
+    note = ("Acute liquidity risk" if qr < 0.5 else "Tight liquidity" if qr < 0.8 else
+            "Borderline" if qr < 1.0 else "Adequate" if qr < 1.2 else
+            "Comfortable" if qr < 1.5 else "Strong" if qr < 2.0 else "Very strong")
+    return s, f"{qr:.2f}x", note, "FLEX"
 
 def score_net_margin(nm):
     if nm is None:
@@ -222,18 +243,6 @@ def score_fcf_margin(fcf, revenue):
             "Very strong" if margin < 0.30 else "Exceptional")
     return s, fmt_pct_abs(margin), note, "FLEX"
 
-def score_analyst_upside(current, target, sym="$"):
-    if current is None or target is None or current == 0:
-        return 50, "N/A", "No analyst target", "FLEX"
-    upside = (target - current) / current
-    s = bracket(upside, [(-0.20,15),(-0.05,30),(0.0,45),(0.05,55),(0.10,64),
-                         (0.20,73),(0.35,82),(0.50,90),(9,96)])
-    note = ("Strong downside implied" if upside < -0.20 else "Analysts cautious" if upside < -0.05 else
-            "At/near consensus target" if upside < 0.05 else "Modest upside" if upside < 0.10 else
-            "Moderate upside" if upside < 0.20 else "Good upside" if upside < 0.35 else
-            "Strong upside" if upside < 0.50 else "Very strong upside")
-    return s, f"{sym}{target:.2f} ({upside:+.0%})", note, "FLEX"
-
 def score_rev_quality(gm, om):
     if gm is None or om is None or gm <= 0:
         return 50, "N/A", "Insufficient data", "FLEX"
@@ -243,6 +252,43 @@ def score_rev_quality(gm, om):
             "Moderate overhead" if conv < 0.50 else "Reasonable" if conv < 0.65 else
             "Efficient" if conv < 0.75 else "Very efficient" if conv < 0.85 else "Lean")
     return s, f"{conv*100:.0f}% conv.", note, "FLEX"
+
+def score_beta(beta):
+    if beta is None:
+        return 55, "N/A", "No beta data", "FLEX"
+    s = bracket(beta, [(0.3,95),(0.6,88),(0.8,82),(1.0,75),(1.2,65),(1.5,55),(2.0,42),(3.0,28),(9999,15)])
+    note = ("Defensive / uncorrelated" if beta < 0.3 else "Low-beta, defensive" if beta < 0.6 else
+            "Below market volatility" if beta < 0.8 else "Market-like" if beta < 1.0 else
+            "Slightly elevated" if beta < 1.2 else "Elevated volatility" if beta < 1.5 else
+            "High volatility" if beta < 2.0 else "Very high" if beta < 3.0 else "Extreme volatility")
+    return s, f"{beta:.2f}", note, "FLEX"
+
+
+def reverse_dcf_implied_growth(price, eps, discount_rate=0.10, terminal_growth=0.03, years=10):
+    """Binary-search for the implied annual EPS growth rate that equates a simple DCF to the current price."""
+    if price is None or eps is None or eps <= 0 or price <= 0:
+        return None
+    def dcf_val(g):
+        pv = sum(eps * (1 + g) ** t / (1 + discount_rate) ** t for t in range(1, years + 1))
+        tv = eps * (1 + g) ** years * (1 + terminal_growth) / (discount_rate - terminal_growth)
+        return pv + tv / (1 + discount_rate) ** years
+    try:
+        lo, hi = -0.30, 2.00
+        if dcf_val(hi) < price:
+            return hi
+        if dcf_val(lo) > price:
+            return lo
+        for _ in range(100):
+            mid = (lo + hi) / 2
+            if dcf_val(mid) < price:
+                lo = mid
+            else:
+                hi = mid
+            if hi - lo < 0.0001:
+                break
+        return round((lo + hi) / 2, 4)
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -300,28 +346,28 @@ def analyze(ticker_symbol):
         ]
 
     val_metrics = make_metrics([
-        ("P/E TTM",       score_pe_ttm(info.get("trailingPE"))),
-        ("Forward P/E",   score_fwd_pe(info.get("forwardPE"))),
-        ("PEG Ratio",     score_peg(info.get("pegRatio"))),
-        ("Price / Sales", score_ps(info.get("priceToSalesTrailing12Months"))),
-        ("EV / EBITDA",   score_ev_ebitda(info.get("enterpriseToEbitda"))),
-        ("EV / FCF",      score_ev_fcf(ev, fcf)),
+        ("P/E TTM",        score_pe_ttm(info.get("trailingPE"))),
+        ("Forward P/E",    score_fwd_pe(info.get("forwardPE"))),
+        ("PEG Ratio",      score_peg(info.get("pegRatio"))),
+        ("Price / Sales",  score_ps(info.get("priceToSalesTrailing12Months"))),
+        ("EV / EBITDA",    score_ev_ebitda(info.get("enterpriseToEbitda"))),
+        ("Analyst Target", score_analyst_upside(price, info.get("targetMeanPrice"), sym)),
     ])
     health_metrics = make_metrics([
         ("Debt / Equity",    score_de_ratio(info.get("debtToEquity"))),
         ("Current Ratio",    score_current_ratio(info.get("currentRatio"))),
+        ("Quick Ratio",      score_quick_ratio(info.get("quickRatio"))),
         ("Net Margin",       score_net_margin(info.get("profitMargins"))),
         ("Return on Equity", score_roe(info.get("returnOnEquity"))),
-        ("Gross Margin",     score_gross_margin(gm)),
         ("Operating Margin", score_op_margin(om)),
     ])
     growth_metrics = make_metrics([
         ("Revenue Growth YoY",  score_rev_growth(info.get("revenueGrowth"))),
         ("Earnings Growth YoY", score_earnings_growth(info.get("earningsGrowth"))),
         ("FCF Margin",          score_fcf_margin(fcf, rev)),
-        ("Gross Margin",        score_gross_margin(gm)),
+        ("EV / FCF",            score_ev_fcf(ev, fcf)),
         ("Revenue Quality",     score_rev_quality(gm, om)),
-        ("Analyst Target",      score_analyst_upside(price, info.get("targetMeanPrice"), sym)),
+        ("Beta",                score_beta(info.get("beta"))),
     ])
 
     val_score    = round(sum(m["score"] for m in val_metrics)    / len(val_metrics))
@@ -399,35 +445,63 @@ def analyze(ticker_symbol):
     if rec in ("sell", "underperform", "strong_sell"):
         risks.append("Sell/underperform analyst consensus - understand the bear thesis before sizing a position")
 
-    catalysts = (catalysts + ["Insufficient data - review latest filings and earnings call"])[:5]
-    risks     = (risks     + ["Insufficient data - review latest filings and earnings call"])[:5]
+    # Only show fallback placeholder if no real content was generated
+    if not catalysts:
+        catalysts = ["Insufficient data - review latest filings and earnings call"]
+    if not risks:
+        risks = ["Insufficient data - review latest filings and earnings call"]
+    catalysts = catalysts[:5]
+    risks     = risks[:5]
 
     eps = info.get("trailingEps")
+
+    # Supplementary data for new sections
+    div_yield    = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
+    div_rate     = info.get("dividendRate") or info.get("trailingAnnualDividendRate")
+    payout       = info.get("payoutRatio")
+    beta_raw     = info.get("beta")
+    short_pct    = info.get("shortPercentOfFloat")
+    inst_pct     = info.get("heldPercentInstitutions")
+    ins_pct      = info.get("heldPercentInsiders")
+    total_debt   = info.get("totalDebt")
+    total_cash   = info.get("totalCash")
+    net_debt_val = (total_debt - total_cash) if (total_debt is not None and total_cash is not None) else None
+    rdcf_growth  = reverse_dcf_implied_growth(price, eps)
+
     return {
-        "ticker":          ticker_symbol.upper(),
-        "name":            name,
-        "sector":          info.get("sector", "N/A"),
-        "industry":        info.get("industry", "N/A"),
-        "exchange":        info.get("exchange", ""),
-        "currency":        curr,
-        "currency_symbol": sym,
-        "price":           price,
-        "change_pct":      info.get("regularMarketChangePercent"),
-        "market_cap":      fmt_large(info.get("marketCap"), sym),
-        "revenue":         fmt_large(info.get("totalRevenue"), sym),
-        "eps_ttm":         f"{sym}{eps:.2f}" if eps else "N/A",
-        "high_52w":        info.get("fiftyTwoWeekHigh"),
-        "low_52w":         info.get("fiftyTwoWeekLow"),
-        "overall":         overall,
-        "val_score":       val_score,
-        "health_score":    health_score,
-        "growth_score":    growth_score,
-        "val_metrics":     val_metrics,
-        "health_metrics":  health_metrics,
-        "growth_metrics":  growth_metrics,
-        "catalysts":       catalysts,
-        "risks":           risks,
-        "date":            datetime.now().strftime("%d %b %Y"),
+        "ticker":             ticker_symbol.upper(),
+        "name":               name,
+        "sector":             info.get("sector", "N/A"),
+        "industry":           info.get("industry", "N/A"),
+        "exchange":           info.get("exchange", ""),
+        "currency":           curr,
+        "currency_symbol":    sym,
+        "price":              price,
+        "change_pct":         info.get("regularMarketChangePercent"),
+        "market_cap":         fmt_large(info.get("marketCap"), sym),
+        "revenue":            fmt_large(info.get("totalRevenue"), sym),
+        "eps_ttm":            f"{sym}{eps:.2f}" if eps else "N/A",
+        "high_52w":           info.get("fiftyTwoWeekHigh"),
+        "low_52w":            info.get("fiftyTwoWeekLow"),
+        "overall":            overall,
+        "val_score":          val_score,
+        "health_score":       health_score,
+        "growth_score":       growth_score,
+        "val_metrics":        val_metrics,
+        "health_metrics":     health_metrics,
+        "growth_metrics":     growth_metrics,
+        "catalysts":          catalysts,
+        "risks":              risks,
+        "dividend_yield":     fmt_pct_abs(div_yield) if div_yield else "N/A",
+        "dividend_rate":      f"{sym}{div_rate:.2f}" if div_rate else "N/A",
+        "payout_ratio":       fmt_pct_abs(payout) if payout else "N/A",
+        "beta_display":       f"{beta_raw:.2f}" if beta_raw is not None else "N/A",
+        "short_interest":     fmt_pct_abs(short_pct) if short_pct else "N/A",
+        "inst_ownership":     fmt_pct_abs(inst_pct) if inst_pct else "N/A",
+        "insider_ownership":  fmt_pct_abs(ins_pct) if ins_pct else "N/A",
+        "net_debt":           fmt_large(net_debt_val, sym) if net_debt_val is not None else "N/A",
+        "reverse_dcf_growth": f"{rdcf_growth*100:.1f}%" if rdcf_growth is not None else None,
+        "date":               datetime.now().strftime("%d %b %Y"),
     }
 
 

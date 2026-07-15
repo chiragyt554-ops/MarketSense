@@ -349,6 +349,58 @@ body {
   background: var(--surface2); color: var(--text-dim); transition: all .15s;
 }
 .tip-btn:hover { background: var(--teal); color: var(--bg); }
+
+/* ── Supplementary stats bar ── */
+.supp-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 22px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.supp-stat label { font-size: 10px; text-transform: uppercase; color: var(--text-dim); display: block; letter-spacing: .04em; }
+.supp-stat span  { font-size: 14px; font-weight: 600; }
+
+/* ── Dividend card ── */
+.dividend-card {
+  background: var(--surface);
+  border: 1px solid rgba(245,158,11,.3);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+.div-heading {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--amber); margin-bottom: 12px;
+}
+.div-stats { display: flex; gap: 36px; flex-wrap: wrap; }
+.div-stat label { font-size: 10px; text-transform: uppercase; color: var(--text-dim); display: block; }
+.div-stat span  { font-size: 17px; font-weight: 700; }
+.div-nodiv { font-size: 13px; color: var(--text-dim); }
+
+/* ── LOCK/FLEX legend ── */
+.tag-legend {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 8px 20px 14px;
+  line-height: 1.7;
+}
+
+/* ── Reverse DCF line ── */
+.rdcf-block {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border-radius: 10px;
+  border-left: 3px solid var(--teal);
+}
+.rdcf-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--teal); margin-bottom: 4px; }
+.rdcf-text  { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -387,13 +439,19 @@ body {
     <span class="chip" onclick="quickAnalyze('SBK.JO')">SBK.JO</span>
   </div>
 
-  <!-- Exchange format guide -->
-  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:8px 20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
-    <span style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Ticker formats</span>
-    <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">NASDAQ / NYSE</span> &nbsp;AAPL, NVDA, MSFT</span>
-    <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">JSE</span> &nbsp;TICKER<span style="color:var(--teal);font-weight:700">.JO</span> &nbsp;e.g. DCP.JO</span>
-    <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">LSE</span> &nbsp;TICKER<span style="color:var(--teal);font-weight:700">.L</span> &nbsp;e.g. SHEL.L</span>
-    <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">ASX</span> &nbsp;TICKER<span style="color:var(--teal);font-weight:700">.AX</span> &nbsp;e.g. CBA.AX</span>
+  <!-- Exchange format guide (collapsible) -->
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:6px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+    <button onclick="toggleTickerGuide()" id="tickerGuideToggle"
+      style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:5px;padding:2px 0;transition:color .15s"
+      title="Show/hide ticker format guide">
+      Ticker formats <span id="tickerGuideChevron" style="transition:transform .2s;display:inline-block">▶</span>
+    </button>
+    <div id="tickerGuideContent" style="display:none;gap:20px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">NASDAQ / NYSE</span> &nbsp;AAPL, NVDA, MSFT</span>
+      <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">JSE</span> &nbsp;TICKER<span style="color:var(--teal);font-weight:700">.JO</span> &nbsp;e.g. DCP.JO</span>
+      <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">LSE</span> &nbsp;TICKER<span style="color:var(--teal);font-weight:700">.L</span> &nbsp;e.g. SHEL.L</span>
+      <span style="font-size:11px;color:var(--text-dim)"><span style="color:var(--text-muted);font-weight:600">ASX</span> &nbsp;TICKER<span style="color:var(--teal);font-weight:700">.AX</span> &nbsp;e.g. CBA.AX</span>
+    </div>
   </div>
 
   <!-- Welcome state -->
@@ -455,7 +513,10 @@ const TOOLTIPS = {
   "Earnings Growth YoY": "The percentage change in EPS vs. the same period last year. When earnings grow faster than revenue, it signals operating leverage and improving profitability.",
   "FCF Margin": "Free Cash Flow as a percentage of revenue. Shows how much of each dollar of sales converts to real, spendable cash after all capex. Harder to manipulate than reported earnings.",
   "Revenue Quality": "Measures how efficiently the company converts gross profit into operating profit (operating margin ÷ gross margin). High conversion = lean, low-overhead business.",
-  "Analyst Target": "The average 12-month price target from analysts who cover the stock, and implied upside/downside. Use as one data point — analysts are often anchored to recent price action.",
+  "Analyst Target": "The consensus 12-month price target from sell-side analysts, shown as implied upside or downside vs. the current price. Moved to Valuation because it directly reflects how analysts price the stock today — use it as one data point alongside your own view.",
+  "Quick Ratio": "Current assets minus inventory, divided by current liabilities — a stricter liquidity test than the current ratio. Inventory may not be quickly convertible to cash, so a quick ratio below 1.0x is more concerning than the same current ratio reading.",
+  "Beta": "Measures how much the stock moves relative to the broader market. Beta of 1.5 means the stock tends to move 50% more than the market — more upside potential but steeper drawdowns. Important for position sizing: high-beta stocks require smaller position sizes to control portfolio risk.",
+  "EV / FCF": "Enterprise Value divided by Free Cash Flow — how many years of current FCF it would take to justify the price, accounting for debt. In the Growth pillar, it anchors whether rapid growth is actually translating into real cash generation.",
   "LOCK": "Structural metric — reliable, consistent, and comparable across time. Figures come from audited financials and are hard to manipulate. Weight these heavily.",
   "FLEX": "Situational metric — useful context, but interpret alongside industry norms, company stage, and sector. Often rely on estimates or vary widely by business model.",
 };
@@ -740,11 +801,39 @@ function renderResults(d) {
     </div>
   </div>`;
 
+  // Supplementary stats bar
+  const suppBar = `<div class="supp-bar">
+    <div class="supp-stat"><label>Beta</label><span>${d.beta_display}</span></div>
+    <div class="supp-stat"><label>Net Debt</label><span>${d.net_debt}</span></div>
+    <div class="supp-stat"><label>Short Interest</label><span>${d.short_interest}</span></div>
+    <div class="supp-stat"><label>Institutional</label><span>${d.inst_ownership}</span></div>
+    <div class="supp-stat"><label>Insider Ownership</label><span>${d.insider_ownership}</span></div>
+  </div>`;
+
   const pillars = `<div class="pillars">
     ${pillarCard('Valuation', '◆', 35, d.val_score, d.val_metrics)}
     ${pillarCard('Financial Health', '◆', 35, d.health_score, d.health_metrics)}
-    ${pillarCard('Growth', '▲', 30, d.growth_score, d.growth_metrics)}
+    ${pillarCard('Growth & Risk', '▲', 30, d.growth_score, d.growth_metrics)}
+  </div>
+  <div class="tag-legend">
+    <span style="color:#3b82f6;font-weight:700">■ LOCK</span> — structural metric from audited financials, reliable across time &nbsp;&nbsp;|&nbsp;&nbsp;
+    <span style="color:#8b5cf6;font-weight:700">■ FLEX</span> — situational metric; interpret alongside industry norms and company stage
   </div>`;
+
+  // Dividend card
+  const divCard = d.dividend_yield !== 'N/A'
+    ? `<div class="dividend-card">
+        <div class="div-heading">💰 Dividend</div>
+        <div class="div-stats">
+          <div class="div-stat"><label>Yield</label><span>${d.dividend_yield}</span></div>
+          <div class="div-stat"><label>Annual Rate</label><span>${d.dividend_rate}</span></div>
+          <div class="div-stat"><label>Payout Ratio</label><span>${d.payout_ratio}</span></div>
+        </div>
+      </div>`
+    : `<div class="dividend-card">
+        <div class="div-heading">💰 Dividend</div>
+        <div class="div-nodiv">This stock does not currently pay a dividend — total return is driven by price appreciation only.</div>
+      </div>`;
 
   const catalysts = d.catalysts.map(c => `<div class="cr-item">✦ ${c}</div>`).join('');
   const risks = d.risks.map(r => `<div class="cr-item">▲ ${r}</div>`).join('');
@@ -760,14 +849,22 @@ function renderResults(d) {
   const vt = d.overall >= 65 ? 'a lower-risk hold for investors with the right time horizon and appropriate position sizing' : d.overall >= 45 ? 'a position that warrants careful sizing — monitor the key risk flags closely before adding' : 'a higher-risk profile requiring thorough due diligence before taking a position';
   const blText = `${d.name} (${d.ticker}) scores <strong>${d.overall}/100</strong>, placing it in the <strong style="color:${col}">${band}</strong> band. The stock appears ${va} (Valuation: ${d.val_score}/100), supported by ${ha} (Financial Health: ${d.health_score}/100), and shows ${ga} (Growth: ${d.growth_score}/100). Taken together, this is ${vt}. Cross-reference with the latest filings and earnings call before taking a position.`;
 
+  const rdcfBlock = d.reverse_dcf_growth
+    ? `<div class="rdcf-block">
+        <div class="rdcf-label">⟳ Reverse DCF — Implied Growth Rate</div>
+        <div class="rdcf-text">At the current price, the market is implying <strong style="color:var(--text)">${d.reverse_dcf_growth}</strong> annual earnings growth over 10 years (assumes 10% discount rate, 3% terminal growth). Ask whether that growth rate is achievable given current fundamentals and competitive position.</div>
+      </div>`
+    : '';
+
   const bottomLine = `<div class="bottom-line">
     <div class="bl-heading">⊕ Bottom Line</div>
     <div class="bl-text">${blText}</div>
+    ${rdcfBlock}
   </div>`;
 
   const disclaimer = `<div class="disclaimer">Analysis generated ${d.date} · Data via Yahoo Finance<br><strong>For informational purposes only. Not financial advice.</strong></div>`;
 
-  document.getElementById('stateResults').innerHTML = hero + pillars + crGrid + bottomLine + disclaimer;
+  document.getElementById('stateResults').innerHTML = hero + suppBar + pillars + divCard + crGrid + bottomLine + disclaimer;
   updateWlCount();
 }
 
@@ -809,6 +906,17 @@ function pillarCard(title, icon, weight, score, metrics) {
     </div>
     <div>${rows}</div>
   </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ticker guide toggle
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleTickerGuide() {
+  const content  = document.getElementById('tickerGuideContent');
+  const chevron  = document.getElementById('tickerGuideChevron');
+  const isOpen   = content.style.display !== 'none';
+  content.style.display  = isOpen ? 'none' : 'flex';
+  chevron.style.transform = isOpen ? '' : 'rotate(90deg)';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
